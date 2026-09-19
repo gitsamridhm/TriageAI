@@ -104,7 +104,7 @@ async def assess_patient(patient_data: dict) -> TriageResult:
             genai.configure(api_key=current_key)
 
         # Try models in order of availability for free tier keys
-        models_to_try = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.0-flash"]
+        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
         response = None
         last_exception = None
 
