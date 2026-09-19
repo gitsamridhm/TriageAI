@@ -1,8 +1,10 @@
 """
 TriageAI - Database Setup
-SQLAlchemy async setup with SQLite for the hackathon.
+SQLAlchemy async setup — reads DATABASE_URL from environment (Tiger Data / PostgreSQL)
+with SQLite fallback for local development.
 """
 
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import String, Integer, Float, Text, DateTime
@@ -10,9 +12,21 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
-DATABASE_URL = "sqlite+aiosqlite:///./triageai.db"
+_raw_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./triageai.db")
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# Convert plain postgres:// / postgresql:// URLs to async driver format
+if _raw_url.startswith("postgres://"):
+    DATABASE_URL = _raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _raw_url.startswith("postgresql://"):
+    DATABASE_URL = _raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = _raw_url
+
+# PostgreSQL needs different connect_args than SQLite
+if DATABASE_URL.startswith("postgresql"):
+    engine = create_async_engine(DATABASE_URL, echo=False)
+else:
+    engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -33,13 +47,13 @@ class Patient(Base):
     chief_complaint: Mapped[str] = mapped_column(Text, nullable=False)
     pain_level: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Vital Signs
-    heart_rate: Mapped[int] = mapped_column(Integer, nullable=False)
-    blood_pressure_systolic: Mapped[int] = mapped_column(Integer, nullable=False)
-    blood_pressure_diastolic: Mapped[int] = mapped_column(Integer, nullable=False)
-    temperature: Mapped[float] = mapped_column(Float, nullable=False)
-    respiratory_rate: Mapped[int] = mapped_column(Integer, nullable=False)
-    spo2: Mapped[float] = mapped_column(Float, nullable=False)
+    # Vital Signs — all Optional for degraded-comms / mass-casualty scenarios
+    heart_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    blood_pressure_systolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    blood_pressure_diastolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    temperature: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    respiratory_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    spo2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Additional Info
     arrival_mode: Mapped[str] = mapped_column(String(20), default="Walk-in")
