@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPatient, runTriage } from '../services/api';
 import { GENDERS, ARRIVAL_MODES, ESI_LEVELS } from '../utils/constants';
 import TriageAssessment from './TriageAssessment';
+import PresageScanModal from './PresageScanModal';
 
 export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, addToast }) {
   const [formData, setFormData] = useState({
@@ -26,10 +27,26 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
   const [triaging, setTriaging] = useState(false);
   const [createdPatient, setCreatedPatient] = useState(null);
   const [triageResult, setTriageResult] = useState(null);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [vitalsSource, setVitalsSource] = useState({ heart_rate: 'manual', respiratory_rate: 'manual' });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleApplyScanReadings = ({ heart_rate, respiratory_rate, provenance }) => {
+    setFormData(prev => ({
+      ...prev,
+      heart_rate: heart_rate ?? prev.heart_rate,
+      respiratory_rate: respiratory_rate ?? prev.respiratory_rate,
+    }));
+    setVitalsSource(prev => ({
+      ...prev,
+      heart_rate: provenance?.heart_rate || 'presage',
+      respiratory_rate: provenance?.respiratory_rate || 'presage',
+    }));
+    addToast(`✅ Presage vitals applied — HR: ${heart_rate} bpm, RR: ${respiratory_rate}/min`, 'success');
   };
 
   const handleSubmit = async (e) => {
@@ -53,13 +70,11 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
       setCreatedPatient(patient);
       addToast(`Patient "${patient.name}" registered. Running AI triage...`, 'info');
 
-      // Automatically run triage
       setTriaging(true);
       const result = await runTriage(patient.id);
       setTriageResult(result);
       setTriaging(false);
 
-      // Update parent with triage result
       onTriageComplete({ ...patient, esi_level: result.esi_level });
 
     } catch (error) {
@@ -80,6 +95,7 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
     });
     setCreatedPatient(null);
     setTriageResult(null);
+    setVitalsSource({ heart_rate: 'manual', respiratory_rate: 'manual' });
   };
 
   const handleAccept = () => {
@@ -87,7 +103,6 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
     handleReset();
   };
 
-  // If we have a triage result, show it
   if (triageResult && createdPatient) {
     return (
       <div>
@@ -110,7 +125,6 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
     );
   }
 
-  // Show AI processing state
   if (triaging) {
     return (
       <div className="loading-container" style={{ minHeight: '400px' }}>
@@ -135,7 +149,6 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
     );
   }
 
-  // Get pain level color
   const getPainColor = (level) => {
     if (level <= 3) return 'var(--esi-4)';
     if (level <= 6) return 'var(--esi-3)';
@@ -153,35 +166,17 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Patient Information */}
         <div className="card" style={{ marginBottom: '20px' }}>
           <div className="form-section">
             <div className="form-section-title">👤 Patient Information</div>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Full Name *</label>
-                <input
-                  className="form-input"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Enter patient's full name"
-                  required
-                />
+                <input className="form-input" name="name" value={formData.name} onChange={handleChange} placeholder="Enter patient's full name" required />
               </div>
               <div className="form-group">
                 <label className="form-label">Age *</label>
-                <input
-                  className="form-input"
-                  name="age"
-                  type="number"
-                  min="0"
-                  max="150"
-                  value={formData.age}
-                  onChange={handleChange}
-                  placeholder="Age"
-                  required
-                />
+                <input className="form-input" name="age" type="number" min="0" max="150" value={formData.age} onChange={handleChange} placeholder="Age" required />
               </div>
               <div className="form-group">
                 <label className="form-label">Gender *</label>
@@ -197,192 +192,122 @@ export default function PatientIntakeForm({ onPatientCreated, onTriageComplete, 
               </div>
               <div className="form-group full-width">
                 <label className="form-label">Chief Complaint *</label>
-                <textarea
-                  className="form-textarea"
-                  name="chief_complaint"
-                  value={formData.chief_complaint}
-                  onChange={handleChange}
-                  placeholder="Describe the primary reason for the ER visit..."
-                  required
-                />
+                <textarea className="form-textarea" name="chief_complaint" value={formData.chief_complaint} onChange={handleChange} placeholder="Describe the primary reason for the ER visit..." required />
               </div>
             </div>
           </div>
 
-          {/* Pain Level */}
           <div className="form-section">
             <div className="form-section-title">💊 Pain Assessment</div>
             <div className="pain-slider-container">
-              <div className="pain-value" style={{ color: getPainColor(formData.pain_level) }}>
-                {formData.pain_level}/10
-              </div>
-              <input
-                type="range"
-                className="pain-slider"
-                name="pain_level"
-                min="0"
-                max="10"
-                value={formData.pain_level}
-                onChange={handleChange}
-                style={{
-                  background: `linear-gradient(to right, var(--esi-4) 0%, var(--esi-3) 30%, var(--esi-2) 60%, var(--esi-1) 100%)`,
-                }}
-              />
+              <div className="pain-value" style={{ color: getPainColor(formData.pain_level) }}>{formData.pain_level}/10</div>
+              <input type="range" className="pain-slider" name="pain_level" min="0" max="10" value={formData.pain_level} onChange={handleChange}
+                style={{ background: `linear-gradient(to right, var(--esi-4) 0%, var(--esi-3) 30%, var(--esi-2) 60%, var(--esi-1) 100%)` }} />
               <div className="pain-slider-labels">
-                <span>No Pain</span>
-                <span>Mild</span>
-                <span>Moderate</span>
-                <span>Severe</span>
-                <span>Worst</span>
+                <span>No Pain</span><span>Mild</span><span>Moderate</span><span>Severe</span><span>Worst</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Vital Signs */}
         <div className="card" style={{ marginBottom: '20px' }}>
           <div className="form-section">
-            <div className="form-section-title">❤️ Vital Signs</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <div className="form-section-title" style={{ marginBottom: '2px' }}>❤️ Vital Signs</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Use Presage to auto-capture HR &amp; Respiratory Rate. Enter BP, temperature, and SpO₂ manually.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScanModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)',
+                  color: '#fff', border: '1px solid rgba(99,179,237,0.3)',
+                  borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap',
+                }}
+              >
+                📷 Check Vitals with Presage
+              </button>
+            </div>
+
             <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               <div className="form-group">
-                <label className="form-label">Heart Rate (bpm) *</label>
-                <input
-                  className="form-input"
-                  name="heart_rate"
-                  type="number"
-                  min="0"
-                  max="300"
-                  value={formData.heart_rate}
-                  onChange={handleChange}
-                  placeholder="60-100 normal"
-                  required
-                />
+                <label className="form-label">
+                  Heart Rate (bpm) *{' '}
+                  {vitalsSource.heart_rate === 'presage' && (
+                    <span style={{ fontSize: '11px', background: 'rgba(59,130,246,0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>📷 Presage</span>
+                  )}
+                </label>
+                <input className="form-input" name="heart_rate" type="number" min="0" max="300" value={formData.heart_rate} onChange={handleChange} placeholder="60-100 normal"
+                  style={vitalsSource.heart_rate === 'presage' ? { borderColor: '#3b82f6', background: 'rgba(59,130,246,0.05)' } : {}} required />
               </div>
               <div className="form-group">
                 <label className="form-label">BP Systolic (mmHg) *</label>
-                <input
-                  className="form-input"
-                  name="blood_pressure_systolic"
-                  type="number"
-                  min="0"
-                  max="300"
-                  value={formData.blood_pressure_systolic}
-                  onChange={handleChange}
-                  placeholder="90-120 normal"
-                  required
-                />
+                <input className="form-input" name="blood_pressure_systolic" type="number" min="0" max="300" value={formData.blood_pressure_systolic} onChange={handleChange} placeholder="90-120 normal" required />
               </div>
               <div className="form-group">
                 <label className="form-label">BP Diastolic (mmHg) *</label>
-                <input
-                  className="form-input"
-                  name="blood_pressure_diastolic"
-                  type="number"
-                  min="0"
-                  max="200"
-                  value={formData.blood_pressure_diastolic}
-                  onChange={handleChange}
-                  placeholder="60-80 normal"
-                  required
-                />
+                <input className="form-input" name="blood_pressure_diastolic" type="number" min="0" max="200" value={formData.blood_pressure_diastolic} onChange={handleChange} placeholder="60-80 normal" required />
               </div>
               <div className="form-group">
                 <label className="form-label">Temperature (°F) *</label>
-                <input
-                  className="form-input"
-                  name="temperature"
-                  type="number"
-                  step="0.1"
-                  min="85"
-                  max="115"
-                  value={formData.temperature}
-                  onChange={handleChange}
-                  placeholder="97.8-99.1 normal"
-                  required
-                />
+                <input className="form-input" name="temperature" type="number" step="0.1" min="85" max="115" value={formData.temperature} onChange={handleChange} placeholder="97.8-99.1 normal" required />
               </div>
               <div className="form-group">
-                <label className="form-label">Respiratory Rate (/min) *</label>
-                <input
-                  className="form-input"
-                  name="respiratory_rate"
-                  type="number"
-                  min="0"
-                  max="80"
-                  value={formData.respiratory_rate}
-                  onChange={handleChange}
-                  placeholder="12-20 normal"
-                  required
-                />
+                <label className="form-label">
+                  Respiratory Rate (/min) *{' '}
+                  {vitalsSource.respiratory_rate === 'presage' && (
+                    <span style={{ fontSize: '11px', background: 'rgba(59,130,246,0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>📷 Presage</span>
+                  )}
+                </label>
+                <input className="form-input" name="respiratory_rate" type="number" min="0" max="80" value={formData.respiratory_rate} onChange={handleChange} placeholder="12-20 normal"
+                  style={vitalsSource.respiratory_rate === 'presage' ? { borderColor: '#3b82f6', background: 'rgba(59,130,246,0.05)' } : {}} required />
               </div>
               <div className="form-group">
                 <label className="form-label">SpO2 (%) *</label>
-                <input
-                  className="form-input"
-                  name="spo2"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={formData.spo2}
-                  onChange={handleChange}
-                  placeholder="95-100 normal"
-                  required
-                />
+                <input className="form-input" name="spo2" type="number" step="0.1" min="0" max="100" value={formData.spo2} onChange={handleChange} placeholder="95-100 normal" required />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Medical History */}
         <div className="card" style={{ marginBottom: '20px' }}>
           <div className="form-section">
             <div className="form-section-title">📋 Medical History</div>
             <div className="form-grid">
               <div className="form-group full-width">
                 <label className="form-label">Allergies</label>
-                <input
-                  className="form-input"
-                  name="allergies"
-                  value={formData.allergies}
-                  onChange={handleChange}
-                  placeholder="List any known allergies..."
-                />
+                <input className="form-input" name="allergies" value={formData.allergies} onChange={handleChange} placeholder="List any known allergies..." />
               </div>
               <div className="form-group full-width">
                 <label className="form-label">Medical History</label>
-                <textarea
-                  className="form-textarea"
-                  name="medical_history"
-                  value={formData.medical_history}
-                  onChange={handleChange}
-                  placeholder="Previous conditions, surgeries, relevant history..."
-                />
+                <textarea className="form-textarea" name="medical_history" value={formData.medical_history} onChange={handleChange} placeholder="Previous conditions, surgeries, relevant history..." />
               </div>
               <div className="form-group full-width">
                 <label className="form-label">Current Medications</label>
-                <textarea
-                  className="form-textarea"
-                  name="current_medications"
-                  value={formData.current_medications}
-                  onChange={handleChange}
-                  placeholder="List current medications and dosages..."
-                />
+                <textarea className="form-textarea" name="current_medications" value={formData.current_medications} onChange={handleChange} placeholder="List current medications and dosages..." />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Submit */}
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-          <button type="button" className="btn btn-secondary btn-lg" onClick={handleReset}>
-            Clear Form
-          </button>
+          <button type="button" className="btn btn-secondary btn-lg" onClick={handleReset}>Clear Form</button>
           <button type="submit" className="btn btn-primary btn-lg" disabled={submitting}>
             {submitting ? '⏳ Processing...' : '🧠 Submit for AI Triage'}
           </button>
         </div>
       </form>
+
+      <PresageScanModal
+        isOpen={showScanModal}
+        onClose={() => setShowScanModal(false)}
+        onApplyReadings={handleApplyScanReadings}
+      />
     </div>
   );
 }
