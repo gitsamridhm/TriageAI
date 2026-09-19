@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ESI_LEVELS } from '../utils/constants';
-import { updatePatientStatus } from '../services/api';
+import { updatePatientStatus, deletePatient } from '../services/api';
 
 export default function PriorityQueue({ patients, onSelectPatient, onPatientUpdated, addToast }) {
   const [filter, setFilter] = useState('all');
@@ -28,6 +28,18 @@ export default function PriorityQueue({ patients, onSelectPatient, onPatientUpda
       onPatientUpdated();
     } catch (error) {
       addToast('Failed to update status', 'error');
+    }
+  };
+
+  const handleDelete = async (e, patient) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete patient "${patient.name}"? This cannot be undone.`)) return;
+    try {
+      await deletePatient(patient.id);
+      addToast(`Patient "${patient.name}" deleted`, 'success');
+      onPatientUpdated();
+    } catch (error) {
+      addToast('Failed to delete patient', 'error');
     }
   };
 
@@ -144,8 +156,8 @@ export default function PriorityQueue({ patients, onSelectPatient, onPatientUpda
                 <div className="patient-card-wait-label">wait time</div>
               </div>
 
-              {/* Status Dropdown */}
-              <div className="patient-card-actions" onClick={e => e.stopPropagation()}>
+              {/* Status Dropdown + Delete Button */}
+              <div className="patient-card-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <select
                   className="form-select"
                   value={patient.status}
@@ -161,6 +173,24 @@ export default function PriorityQueue({ patients, onSelectPatient, onPatientUpda
                   <option value="Discharged">✅ Discharged</option>
                   <option value="Admitted">🏥 Admitted</option>
                 </select>
+                <button
+                  onClick={(e) => handleDelete(e, patient)}
+                  title="Delete patient"
+                  style={{
+                    background: 'rgba(239,68,68,0.15)',
+                    border: '1px solid rgba(239,68,68,0.4)',
+                    borderRadius: '6px',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    padding: '4px 8px',
+                    flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             </div>
           ))
