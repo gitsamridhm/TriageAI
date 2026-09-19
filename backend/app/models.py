@@ -46,13 +46,13 @@ class PatientCreate(BaseModel):
     chief_complaint: str = Field(..., min_length=1, description="Primary reason for ER visit")
     pain_level: int = Field(..., ge=0, le=10, description="Pain scale 0-10")
 
-    # Vital Signs
-    heart_rate: int = Field(..., ge=0, le=300, description="Heart rate in bpm")
-    blood_pressure_systolic: int = Field(..., ge=0, le=300, description="Systolic BP in mmHg")
-    blood_pressure_diastolic: int = Field(..., ge=0, le=200, description="Diastolic BP in mmHg")
-    temperature: float = Field(..., ge=85.0, le=115.0, description="Temperature in °F")
-    respiratory_rate: int = Field(..., ge=0, le=80, description="Breaths per minute")
-    spo2: float = Field(..., ge=0, le=100, description="Oxygen saturation %")
+    # Vital Signs — all Optional for degraded-comms / mass-casualty scenarios
+    heart_rate: Optional[int] = Field(None, ge=0, le=300, description="Heart rate in bpm")
+    blood_pressure_systolic: Optional[int] = Field(None, ge=0, le=300, description="Systolic BP in mmHg")
+    blood_pressure_diastolic: Optional[int] = Field(None, ge=0, le=200, description="Diastolic BP in mmHg")
+    temperature: Optional[float] = Field(None, ge=85.0, le=115.0, description="Temperature in °F")
+    respiratory_rate: Optional[int] = Field(None, ge=0, le=80, description="Breaths per minute")
+    spo2: Optional[float] = Field(None, ge=0, le=100, description="Oxygen saturation %")
 
     # Additional Info
     arrival_mode: ArrivalMode = ArrivalMode.WALK_IN
@@ -95,12 +95,12 @@ class PatientResponse(BaseModel):
     pain_level: int
 
     # Vitals
-    heart_rate: int
-    blood_pressure_systolic: int
-    blood_pressure_diastolic: int
-    temperature: float
-    respiratory_rate: int
-    spo2: float
+    heart_rate: Optional[int] = None
+    blood_pressure_systolic: Optional[int] = None
+    blood_pressure_diastolic: Optional[int] = None
+    temperature: Optional[float] = None
+    respiratory_rate: Optional[int] = None
+    spo2: Optional[float] = None
 
     # Additional
     arrival_mode: str
