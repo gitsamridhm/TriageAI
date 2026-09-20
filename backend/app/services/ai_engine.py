@@ -5,6 +5,7 @@ Integrates with Google Gemini API to provide intelligent triage assessments.
 
 import json
 import os
+import time
 import google.generativeai as genai
 from dotenv import load_dotenv
 from app.models import TriageResult
@@ -90,10 +91,10 @@ IMPORTANT:
 async def assess_patient(patient_data: dict) -> TriageResult:
     """
     Use Gemini AI to assess a patient and return a triage recommendation.
-    
+
     Args:
         patient_data: Dictionary containing patient information
-        
+
     Returns:
         TriageResult with ESI level, reasoning, and recommendations
     """
@@ -103,35 +104,43 @@ async def assess_patient(patient_data: dict) -> TriageResult:
         if current_key:
             genai.configure(api_key=current_key)
 
-        # Try models in order of availability for free tier keys
-        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
+        models_to_try = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"]
         response = None
         last_exception = None
 
         prompt = build_patient_prompt(patient_data)
 
         for model_name in models_to_try:
-            try:
-                model = genai.GenerativeModel(
-                    model_name=model_name,
-                    system_instruction=TRIAGE_SYSTEM_PROMPT,
-                    generation_config=genai.GenerationConfig(
-                        temperature=0.3,
-                        response_mime_type="application/json",
+            # Retry each model up to 3 times on 503/UNAVAILABLE errors
+            for attempt in range(3):
+                try:
+                    model = genai.GenerativeModel(
+                        model_name=model_name,
+                        system_instruction=TRIAGE_SYSTEM_PROMPT,
+                        generation_config=genai.GenerationConfig(
+                            temperature=0.3,
+                            response_mime_type="application/json",
+                        )
                     )
-                )
-                response = model.generate_content(prompt)
-                if response and response.text:
+                    response = model.generate_content(prompt)
+                    if response and response.text:
+                        break
+                except Exception as ex:
+                    last_exception = ex
+                    err_str = str(ex)
+                    if ("503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str) and attempt < 2:
+                        print(f"Model {model_name} attempt {attempt + 1} failed: {ex}. Retrying in 2s...")
+                        time.sleep(2)
+                        continue
+                    print(f"Model {model_name} failed: {ex}. Trying next model...")
                     break
-            except Exception as ex:
-                last_exception = ex
-                print(f"Model {model_name} failed: {ex}. Trying fallback...")
-                continue
+
+            if response and response.text:
+                break
 
         if not response:
             raise last_exception or Exception("All Gemini models failed")
 
-        # Parse the JSON response
         result_json = json.loads(response.text)
 
         return TriageResult(
@@ -145,7 +154,6 @@ async def assess_patient(patient_data: dict) -> TriageResult:
         )
 
     except json.JSONDecodeError as e:
-        # If JSON parsing fails, return a safe default
         print(f"JSON Parse Error: {e}")
         print(f"Raw response: {response.text}")
         return TriageResult(
