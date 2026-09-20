@@ -127,6 +127,9 @@ class PatientResponse(BaseModel):
     created_at: str
     triage_completed_at: Optional[str] = None
 
+    treatment_started_at: Optional[str] = None
+    discharged_at: Optional[str] = None
+    
     class Config:
         from_attributes = True
 
