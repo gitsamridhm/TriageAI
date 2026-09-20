@@ -6,8 +6,22 @@ export default function PriorityQueue({ patients, onSelectPatient, onPatientUpda
   const [filter, setFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const getWaitTime = (createdAt) => {
-    const diff = Date.now() - new Date(createdAt).getTime();
+  const getWaitTime = (patient) => {
+    const { created_at, treatment_started_at, discharged_at, status } = patient;
+
+    // Discharged or Admitted — freeze timer at discharge time
+    if ((status === 'Discharged' || status === 'Admitted') && discharged_at) {
+      const diff = new Date(discharged_at).getTime() - new Date(created_at).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 60) return `${mins}m ✓`;
+      return `${Math.floor(mins / 60)}h ${mins % 60}m ✓`;
+    }
+
+    // In Treatment — reset timer from when treatment started
+    const startTime = treatment_started_at
+      ? new Date(treatment_started_at).getTime()
+      : new Date(created_at).getTime();
+    const diff = Date.now() - startTime;
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m`;
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -151,9 +165,12 @@ export default function PriorityQueue({ patients, onSelectPatient, onPatientUpda
                   className="patient-card-wait-time"
                   style={{ color: patient.esi_level ? ESI_LEVELS[patient.esi_level]?.color : 'var(--text-secondary)' }}
                 >
-                  {getWaitTime(patient.created_at)}
+                  {getWaitTime(patient)}
                 </div>
-                <div className="patient-card-wait-label">wait time</div>
+                <div className="patient-card-wait-label">
+                  {patient.status === 'In Treatment' ? 'in treatment' : 
+                   patient.status === 'Discharged' || patient.status === 'Admitted' ? 'total time' : 'wait time'}
+                </div>
               </div>
 
               {/* Status Dropdown + Delete Button */}
