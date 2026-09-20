@@ -83,6 +83,8 @@ class Patient(Base):
     )
     triage_completed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
+    treatment_started_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    discharged_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
 async def get_db():
     """Dependency that yields an async database session."""
