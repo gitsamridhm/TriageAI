@@ -6,20 +6,67 @@ AI-Powered Emergency Room Smart Triage System
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
-from app.database import create_tables
+from app.database import create_tables, engine
 from app.routers import patients, triage, analytics
+
+
+async def run_migrations():
+    """Add any missing columns to existing tables (safe to run on every startup)."""
+    async with engine.begin() as conn:
+        db_url = str(engine.url)
+        is_sqlite = "sqlite" in db_url
+
+        if is_sqlite:
+            result = await conn.execute(text("PRAGMA table_info(patients)"))
+            existing = {row[1] for row in result.fetchall()}
+            if "treatment_started_at" not in existing:
+                await conn.execute(text("ALTER TABLE patients ADD COLUMN treatment_started_at VARCHAR(30)"))
+                print("✅ Added treatment_started_at column")
+            if "discharged_at" not in existing:
+                await conn.execute(text("ALTER TABLE patients ADD COLUMN discharged_at VARCHAR(30)"))
+                print("✅ Added discharged_at column")
+            if "vitals_source" not in existing:
+                await conn.execute(text("ALTER TABLE patients ADD COLUMN vitals_source TEXT DEFAULT '{}'"))
+                print("✅ Added vitals_source column")
+        else:
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='patients' AND column_name='treatment_started_at'
+                    ) THEN
+                        ALTER TABLE patients ADD COLUMN treatment_started_at VARCHAR(30);
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='patients' AND column_name='discharged_at'
+                    ) THEN
+                        ALTER TABLE patients ADD COLUMN discharged_at VARCHAR(30);
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='patients' AND column_name='vitals_source'
+                    ) THEN
+                        ALTER TABLE patients ADD COLUMN vitals_source TEXT DEFAULT '{}';
+                    END IF;
+                END $$;
+            """))
+            print("✅ PostgreSQL migration check complete")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup: create database tables
     await create_tables()
-    print("✅ Database tables created")
+    await run_migrations()
+    print("✅ Database tables created/migrated")
     print("🏥 TriageAI Backend is ready!")
     yield
-    # Shutdown
     print("👋 TriageAI Backend shutting down")
 
 
@@ -30,7 +77,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - Allow all origins for hackathon development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,7 +85,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(patients.router)
 app.include_router(triage.router)
 app.include_router(analytics.router)
@@ -47,7 +92,6 @@ app.include_router(analytics.router)
 
 @app.get("/", tags=["Health"])
 async def root():
-    """Health check endpoint."""
     return {
         "status": "healthy",
         "service": "TriageAI API",
@@ -58,7 +102,6 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Detailed health check."""
     return {
         "status": "healthy",
         "database": "connected",
