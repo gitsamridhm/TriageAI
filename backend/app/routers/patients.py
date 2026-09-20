@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
+from datetime import datetime, timezone
 
 from app.database import get_db, Patient
 from app.models import PatientCreate, PatientResponse, PatientStatusUpdate, NurseOverride
@@ -46,6 +47,8 @@ def patient_to_response(patient: Patient) -> PatientResponse:
         status=patient.status,
         created_at=patient.created_at,
         triage_completed_at=patient.triage_completed_at,
+        treatment_started_at=patient.treatment_started_at,
+        discharged_at=patient.discharged_at,
     )
 
 
@@ -84,7 +87,7 @@ async def list_patients(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    List all patients, sorted by ESI level (most critical first), 
+    List all patients, sorted by ESI level (most critical first),
     then by arrival time (earliest first).
     """
     query = select(Patient)
@@ -96,7 +99,6 @@ async def list_patients(
 
     # Sort: ESI level ascending (1=most critical first), nulls last, then by created_at
     query = query.order_by(
-        # Patients with ESI levels come first, sorted by level
         Patient.esi_level.asc().nullslast(),
         Patient.created_at.asc(),
     )
@@ -125,14 +127,21 @@ async def update_patient_status(
     status_update: PatientStatusUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a patient's status (Waiting, In Treatment, Discharged, Admitted)."""
+    """Update a patient's status and record timestamps for treatment start and discharge."""
     result = await db.execute(select(Patient).where(Patient.id == patient_id))
     patient = result.scalar_one_or_none()
 
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    now = datetime.now(timezone.utc).isoformat()
     patient.status = status_update.status.value
+
+    if status_update.status.value == "In Treatment":
+        patient.treatment_started_at = now
+    elif status_update.status.value in ("Discharged", "Admitted"):
+        patient.discharged_at = now
+
     await db.commit()
     await db.refresh(patient)
 
@@ -154,7 +163,7 @@ async def nurse_override(
 
     patient.nurse_override_level = override.esi_level
     patient.nurse_override_reason = override.reason
-    patient.esi_level = override.esi_level  # Update the active ESI level
+    patient.esi_level = override.esi_level
     patient.triage_status = "Overridden"
 
     await db.commit()
