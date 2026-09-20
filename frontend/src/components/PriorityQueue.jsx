@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ESI_LEVELS } from '../utils/constants';
 import { updatePatientStatus, deletePatient } from '../services/api';
 
 export default function PriorityQueue({ patients, onSelectPatient, onPatientUpdated, addToast }) {
   const [filter, setFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [, setTick] = useState(0);
+
+  // Re-render every 30 seconds so wait times stay live
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const getWaitTime = (patient) => {
     const { created_at, treatment_started_at, discharged_at, status } = patient;
